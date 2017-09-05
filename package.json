@@ -1,0 +1,22 @@
+{
+  "name": "downsample",
+  "version": "0.1.0",
+  "description": "JavaScript implementations of various downsampling algorithms",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "./node_modules/.bin/webpack-dev-server --watch --colors --progress",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Giles Van Gruisen",
+  "license": "MIT",
+  "devDependencies": {
+    "babel-core": "^6.25.0",
+    "babel-loader": "^7.1.1",
+    "babel-preset-env": "^1.6.0",
+    "webpack": "^3.4.1",
+    "webpack-dev-server": "^2.6.1"
+  },
+  "dependencies": {
+    "chunk": "0.0.2"
+  }
+}
