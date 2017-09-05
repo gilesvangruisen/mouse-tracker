@@ -54,6 +54,7 @@ function onMouseMove(onStart, onSample, onStop) {
       y: e.clientY,
       vx: e.movementX / timeDelta,
       vy: e.movementY / timeDelta,
+      rad: Math.atan2(e.movementX, e.movementY)
     }
 
     points.push(nextPoint)
@@ -62,19 +63,23 @@ function onMouseMove(onStart, onSample, onStop) {
       onStart(nextPoint)
     }
 
-    let ax = (nextPoint.vx - lastPoint.vx) / timeDelta,
-        ay = (nextPoint.vy - lastPoint.vy) / timeDelta
-
-
-    console.log(ax, ay)
-
     onSample(nextPoint)
 
-    stopTimeout && clearTimeout(stopTimeout)
-    stopTimeout = setTimeout(() => {
-      pushTimeout && clearTimeout(pushTimeout)
+    // let ax = ((nextPoint.vx - lastPoint.vx) * 10) / timeDelta,
+    //     ay = ((nextPoint.vy - lastPoint.vy) * 10) / timeDelta
+
+    const dRad = (nextPoint.rad - lastPoint.rad) * 10
+
+    // console.log(dRad)
+    if (dRad > 1.25) {
       onStop(nextPoint)
-    }, timeoutTime)
+    } else {
+      stopTimeout && clearTimeout(stopTimeout)
+      stopTimeout = setTimeout(() => {
+        pushTimeout && clearTimeout(pushTimeout)
+        onStop(nextPoint)
+      }, timeoutTime)
+    }
   }
 }
 
@@ -97,18 +102,21 @@ class MouseProcessor {
   finish() {
     if (this.samples.length < 2) { return }
 
-    const points = this.samples.slice()
+    const localpoints = this.samples.slice()
     this.samples = []
 
-    const curve = this._buildCurve(points)
+    const curve = this._buildCurve(localpoints)
     this.curves.push(curve)
 
     markCurve(curve)
+
+    console.log('p', points.length)
+    console.log('c', this.curves.length)
   }
 
   _buildCurve(points) {
-    const gap = 1 // Math.floor(points.length / 5)
-    const factor = 1
+    const gap = Math.max(Math.floor(points.length / 5), 1)
+    const factor = 2
 
     const startP = points[0],
           startP2 = points[gap],
