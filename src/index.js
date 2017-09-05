@@ -59,8 +59,15 @@ function onMouseMove(onStart, onSample, onStop) {
 
     points.push(nextPoint)
 
-    if (!lastPoint || timeDelta > timeoutTime) {
+    if (!lastPoint) {
       onStart(nextPoint)
+    } else if (timeDelta > timeoutTime) {
+      const startPoint = Object.assign({}, nextPoint, {
+        x: lastPoint.x,
+        y: lastPoint.y
+      })
+
+      onStart(startPoint)
     }
 
     onSample(nextPoint)
@@ -71,7 +78,7 @@ function onMouseMove(onStart, onSample, onStop) {
     const dRad = (nextPoint.rad - lastPoint.rad) * 10
 
     // console.log(dRad)
-    if (dRad > 1.25) {
+    if (dRad > 1) {
       onStop(nextPoint)
     } else {
       stopTimeout && clearTimeout(stopTimeout)
