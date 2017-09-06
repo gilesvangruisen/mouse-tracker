@@ -17,14 +17,23 @@
         bottom: 0;
         left: 0;
         right: 0;
-        /*width: 100%;*/
-        /*heigth: 100%;*/
         background: red;
+      }
+      h1 { position: absolute; }
+      input#slider {
+        position: absolute;
+        left: 5%;
+        right: 5%:;
+        bottom: 10px;
+        width: 90%;
       }
     </style>
   </head>
   <body>
-    <svg id="svg" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"></svg>
+    <h1>10</h1>
+    <svg id="svg" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+      <circle id="cursor" cy="0" cx="0" r="10" fill="rgba(0,100,0,0.5)" />
+    </svg>
     <script src="bundle.js"></script>
   </body>
 </html>
