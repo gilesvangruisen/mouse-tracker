@@ -4,13 +4,13 @@ import MousePlayer from './player'
 window.recorder = new MouseRecorder()
 window.player = new MousePlayer()
 
-var i = 15;
+var i = 10;
 
 const countdown = setInterval(() => {
   i--
   document.querySelector('h1').innerHTML = i
   if (i === 0) {
-    clearInterval(countdown)
+    // clearInterval(countdown)
 
     window.recorder.stopRecording()
     window.player.setCurves(window.recorder.curves)

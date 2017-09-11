@@ -1,3 +1,9 @@
+import sortedLastIndexBy from 'lodash/sortedLastIndexBy';
+
+function invariant(condition, msg) {
+  if (!condition) { throw new Error(msg) }
+}
+
 function addSVG(element, attr) {
   const svg = document.getElementById('svg')
 
@@ -10,8 +16,14 @@ function addSVG(element, attr) {
   svg.appendChild(path)
 }
 
-function markCurve({ x, y, cx, cy, x2, y2, cx2, cy2 }) {
-  const path = `M ${x} ${y}, C ${cx} ${cy}, ${cx2} ${cy2}, ${x2} ${y2}`
+function markCurve(points) {
+  const [p0, p1, p2, p3] = points
+  const path = `M ${p0.x} ${p0.y}, C ${p1.x} ${p1.y}, ${p2.x} ${p2.y}, ${p3.x} ${p3.y}`
+
+  markPoint(p0, 'red', 4)
+  markPoint(p1, 'green', 4)
+  markPoint(p2, 'green', 4)
+  markPoint(p3, 'red', 4)
 
   addSVG('path', {
     d: path,
@@ -32,16 +44,12 @@ function markPoint(point, color = 'red', size = 20) {
   })
 }
 
-var stopTimeout;
-var pushTimeout;
-
-function smooth(a, x, y) {
-  return 1 / (1 + Math.exp(-a * (x || 1) + (y || 1)))
-}
-
 class MouseMoveEvent {
   constructor(event, prev) {
-    this.prev = prev || null
+    this.browserEvent = event
+
+    this.prev = prev || null;
+    if (this.prev) { this.prev.next = this }
 
     this.t = Date.now()
     this.dt = this.prev ? this.t - this.prev.t : null
@@ -49,11 +57,6 @@ class MouseMoveEvent {
     this.dy = event.movementY
     this.x = event.clientX
     this.y = event.clientY
-    // this.velX = this.dx / this.dt
-    // this.velY = this.dy / this.dt
-    this.dist = Math.sqrt((Math.abs(this.dx)^2) + (Math.abs(this.dy)^2))
-    this.vel = this.dist / this.dt
-    this.dir = Math.atan2(this.dx, this.dy)
   }
 
   getPrev(n = 1) {
@@ -67,66 +70,70 @@ class MouseMoveEvent {
     return prev
   }
 
-  getDelta(offset = 0, length = 1) {
-    const end = offset > 0 ? this.getPrev(offset) : this
-    const start = this.getPrev(offset + length)
+  getNext(n = 1) {
+    let next = this, i = 1;
 
-    const dx = end.x - start.x
-    const dy = end.y - start.y
-    const dist = Math.sqrt((Math.abs(dx)^2) + (Math.abs(dy)^2))
-
-    if (dist === 0) {
-      console.log('========')
-      console.log(dist)
-      console.log(Math.abs(dx)^2, Math.abs(dy)^2)
+    while (next.next !== null) {
+      next = next.next
+      if (i === n) { break } else { i++ }
     }
 
-    return {
-      t: start.t,
-      endt: end.t,
-      dt: end.t - start.t,
-      dx: dx,
-      dy: dy,
-      dist: dist,
-      vel: dist / (end.t - start.t),
-      dir: Math.atan2(dy, dx)
-    }
+    return next
   }
 }
 
 class CurveEvent {
   constructor(events) {
-    const startP = events[0],
-      startP2 = events[1],
-      endP = events[events.length - 1],
-      endP2 = events[events.length - 2]
+    const start = events[0],
+          end = events[events.length - 1],
+          curveDuration = end.t - start.t,
+          startControl = start.getNext(2),
+          endControl = end.getPrev(2)
+
+    const midPointIndex = sortedLastIndexBy(events, { t: start.t + (curveDuration / 2) }, e => e.t)
+
+    const midLeft = events[midPointIndex]
+    const midRight = events[midPointIndex + 1]
+
+    const mid = {
+      t: start.t + (curveDuration / 2),
+      x: midLeft.x + ((midRight.x - midLeft.x) / 2),
+      y: midLeft.y + ((midRight.y - midLeft.y) / 2),
+    }
+
+    markPoint(mid, 'blue', 20)
+
+    console.log(events[midPointIndex])
+
+    const startDelta = startControl.t - start.t
+    const endDelta = end.t - endControl.t
 
     this.start = {
-      x: startP.x,
-      y: startP.y,
-      t: startP.t,
-      dx: startP2.x - startP.x,
-      dy: startP2.y - startP.y,
-      dt: startP2.t - startP.t,
+      x: start.x,
+      y: start.y,
+      t: start.t,
+      vx: (startControl.x - start.x) / startDelta,
+      vy: (startControl.y - start.y) / startDelta,
+      dt: startControl.t - start.t,
     }
 
     this.end = {
-      x: endP.x,
-      y: endP.y,
-      t: endP.t,
-      dx: endP.x - endP2.x,
-      dy: endP.y - endP2.y,
-      dt: endP.t - endP2.t,
+      x: end.x,
+      y: end.y,
+      t: end.t,
+      vx: (end.x - endControl.x) / endDelta,
+      vy: (end.y - endControl.y) / endDelta,
+      dt: end.t - endControl.t,
     }
   }
 
   positionAt(time) {
     const prog = (time - this.start.t) / (this.end.t - this.start.t)
-    const t = Math.max(Math.min(prog, 1), 0) // limit 0-1
+    const t = Math.max(Math.min(prog, 1), 0)
 
-    const points = this.bezierCurvePoints()
-    const [x0, x1, x2, x3] = points.map(p => p.x)
-    const [y0, y1, y2, y3] = points.map(p => p.y)
+    const points = this.bezierCurvePoints(),
+          [x0, x1, x2, x3] = points.map(p => p.x),
+          [y0, y1, y2, y3] = points.map(p => p.y)
 
     const x = this._bezier(t, x0, x1, x2, x3),
           y = this._bezier(t, y0, y1, y2, y3)
@@ -135,31 +142,52 @@ class CurveEvent {
   }
 
   bezierCurvePoints() {
-    const factor = 3
+    const { start, end } = this
+    const curveDuration = end.t - start.t
 
-    const { x, y, dx, dy } = this.start,
-          cx = x + (dx * factor),
-          cy = y + (dy * factor)
+    const minFactor = 1
+    const maxFactor = 2
 
-    const { x: x2, y: y2, dx: dx2, dy: dy2 } = this.end,
-          cx2 = x2 - (dx2 * factor),
-          cy2 = y2 - (dy2 * factor)
+    const makeFactor = (dt, duration) => {
+      const t = 1 - (Math.min(dt / duration, 0.5) * 2)
+      const weight = 1 / (1 + Math.exp(-(t * 12) + 6))
+
+      return (weight * (maxFactor - minFactor)) + minFactor
+    }
+
+    const startFactor = 2 //makeFactor(start.dt, curveDuration)
+    const endFactor = 2 //makeFactor(end.dt, curveDuration)
+
+    // console.log((start.dt / curveDuration), '==> ', startFactor)
+    // console.log((end.dt / curveDuration), '==> ', endFactor)
+
+    const factor = 1
 
     return [
-      { x, y },
-      { x: cx, y: cy },
-      { x: cx2, y: cy2 },
-      { x: x2, y: y2}
+      {
+        x: start.x,
+        y: start.y,
+      },
+      {
+        x: start.x + (start.vx * start.dt),
+        y: start.y + (start.vy * start.dt),
+      },
+      {
+        x: end.x - (end.vx * end.dt),
+        y: end.y - (end.vy * end.dt),
+      },
+      {
+        x: end.x,
+        y: end.y
+      }
     ]
   }
 
   _bezier(t, p0, p1, p2, p3) {
-    return [
-      Math.pow(1 - t, 3) * p0,
-      3 * Math.pow(1 - t, 2) * t * p1,
-      3 * (1 - t) * Math.pow(t, 2) * p2,
-      Math.pow(t, 3) * p3,
-    ].reduce((a, e) => (a + e), 0)
+    return Math.pow(1 - t, 3) * p0
+         + 3 * Math.pow(1 - t, 2) * t * p1
+         + 3 * (1 - t) * Math.pow(t, 2) * p2
+         + Math.pow(t, 3) * p3
   }
 }
 
@@ -186,6 +214,10 @@ export default class MouseRecorder {
   }
 
   shouldFinish(event) {
+    if (this.events.length < 2) {
+      return false
+    }
+
     if (event.dt > this._defaultTimeout) {
       return true
     }
@@ -199,13 +231,23 @@ export default class MouseRecorder {
 
   add(browserEvent) {
     this._finishTimeout && clearTimeout(this._finishTimeout)
-    const event = new MouseMoveEvent(browserEvent, this._lastEvent)
 
-    if (this.events.length < 1) {
-      markPoint(event, 'rgba(200, 0, 0, 1)', 10)
-    } else {
-      markPoint(event, 'rgba(100, 100, 100, 0.25)', 5)
-    }
+    const event = new MouseMoveEvent(browserEvent, this._lastEvent)
+    markPoint(event, 'rgba(100,100,100,0.25)', 5)
+
+    // if (this._lastEvent &&
+    //     this.events.length == 0 &&
+    //     event.dt < this._defaultTimeout) {
+
+    //   const firstEvent = new MouseMoveEvent(this._lastEvent.browserEvent, null)
+    // firstEvent.first = true
+    //   firstEvent.t = event.t
+
+    //   firstEvent.next = event
+    //   event.prev = firstEvent
+
+    //   this.events.push(firstEvent)
+    // }
 
     this.events.push(event)
     this._lastEvent = event
@@ -218,42 +260,16 @@ export default class MouseRecorder {
   }
 
   finish() {
-    if (this.events.length < 1.2) { return }
+    const eventCount = this.events.length
+
+    if (eventCount < 2) { return }
 
     const events = this.events.slice()
     this.events = []
 
-    const curve = this._buildCurve(events)
-
     const curveEvent = new CurveEvent(events)
     this.curves.push(curveEvent)
 
-    markCurve(curve)
-  }
-
-  _buildCurve(events) {
-    const gap = Math.max(Math.floor(events.length / 5), 1),
-          factor = 2
-
-    const startP = events[0],
-          startP2 = events[gap],
-          endP = events[events.length - 1],
-          endP2 = events[events.length - gap - 1]
-
-    const x = startP.x,
-          y = startP.y,
-          dx = startP2.x - x,
-          dy = startP2.y - y,
-          cx = x + (dx * factor),
-          cy = y + (dy * factor)
-
-    const x2 = endP.x,
-          y2 = endP.y,
-          dx2 = x2 - endP2.x,
-          dy2 = y2 - endP2.y,
-          cx2 = x2 - (dx2 * factor),
-          cy2 = y2 - (dy2 * factor)
-
-    return { x, y, cx, cy, x2, y2, cx2, cy2 }
+    markCurve(curveEvent.bezierCurvePoints())
   }
 }

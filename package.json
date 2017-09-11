@@ -17,6 +17,7 @@
     "webpack-dev-server": "^2.6.1"
   },
   "dependencies": {
-    "chunk": "0.0.2"
+    "chunk": "0.0.2",
+    "lodash": "^4.17.4"
   }
 }
