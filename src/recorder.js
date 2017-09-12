@@ -86,44 +86,31 @@ class CurveEvent {
   constructor(events) {
     const start = events[0],
           end = events[events.length - 1],
-          curveDuration = end.t - start.t,
-          startControl = start.getNext(2),
-          endControl = end.getPrev(2)
-
-    const midPointIndex = sortedLastIndexBy(events, { t: start.t + (curveDuration / 2) }, e => e.t)
-
-    const midLeft = events[midPointIndex]
-    const midRight = events[midPointIndex + 1]
-
-    const mid = {
-      t: start.t + (curveDuration / 2),
-      x: midLeft.x + ((midRight.x - midLeft.x) / 2),
-      y: midLeft.y + ((midRight.y - midLeft.y) / 2),
-    }
-
-    markPoint(mid, 'blue', 20)
-
-    console.log(events[midPointIndex])
-
-    const startDelta = startControl.t - start.t
-    const endDelta = end.t - endControl.t
+          curveDuration = end.t - start.t
 
     this.start = {
       x: start.x,
       y: start.y,
       t: start.t,
-      vx: (startControl.x - start.x) / startDelta,
-      vy: (startControl.y - start.y) / startDelta,
-      dt: startControl.t - start.t,
+      m: start.dy / start.dx,
+    }
+
+    const midPointIndex = Math.floor((events.length - 1) / 2)//sortedLastIndexBy(events, { t: start.t + (curveDuration / 2) }, e => e.t)
+    const midLeft = events[midPointIndex]
+    const midRight = events[midPointIndex + 1]
+
+    this.mid = {
+      t: midLeft.t + ((midRight.t - midLeft.t) / 2),
+      x: midLeft.x + ((midRight.x - midLeft.x) / 2),
+      y: midLeft.y + ((midRight.y - midLeft.y) / 2),
+      m: (midRight.y - midLeft.y) / (midRight.x - midLeft.x) || 0,
     }
 
     this.end = {
       x: end.x,
       y: end.y,
       t: end.t,
-      vx: (end.x - endControl.x) / endDelta,
-      vy: (end.y - endControl.y) / endDelta,
-      dt: end.t - endControl.t,
+      m: end.dy / end.dx,
     }
   }
 
@@ -148,39 +135,107 @@ class CurveEvent {
     const minFactor = 1
     const maxFactor = 2
 
-    const makeFactor = (dt, duration) => {
-      const t = 1 - (Math.min(dt / duration, 0.5) * 2)
-      const weight = 1 / (1 + Math.exp(-(t * 12) + 6))
-
-      return (weight * (maxFactor - minFactor)) + minFactor
+    const baselineVector = {
+      x: end.x - start.x,
+      y: end.y - start.y,
     }
 
-    const startFactor = 2 //makeFactor(start.dt, curveDuration)
-    const endFactor = 2 //makeFactor(end.dt, curveDuration)
+    const baselineLength = Math.sqrt(Math.pow(baselineVector.x, 2) + Math.pow(baselineVector.y, 2))
 
-    // console.log((start.dt / curveDuration), '==> ', startFactor)
-    // console.log((end.dt / curveDuration), '==> ', endFactor)
+    const abc = (b, t) => {
+      const u = Math.pow(1 - t, 3) / (Math.pow(t, 3) + Math.pow(1 - t, 3))
+      const _u = 1 - u
 
-    const factor = 1
+      const rPart = Math.pow(t, 3) + Math.pow(1 - t, 3)
+      const r = Math.abs((rPart - 1) / rPart)
 
-    return [
+      const c = {
+        x: start.x + (_u * baselineVector.x),
+        y: start.y + (_u * baselineVector.y),
+      }
+
+      const a = {
+        x: b.x + ((b.x - c.x) / r),
+        y: b.y + ((b.y - c.y) / r),
+      }
+
+      return { a, b, c }
+    }
+
+
+    const t = 0.5
+    const tension = 0.4
+
+    const deVector = {
+      x: baselineVector.x * tension,
+      y: baselineVector.y * tension
+    }
+
+    const { a, b, c } = abc(this.mid, t)
+
+    // markPoint(a, 'red', 10)
+    // markPoint(b, 'green', 10)
+    // markPoint(c, 'blue', 10)
+
+    // const deRun = deLen / Math.sqrt(Math.pow(this.mid.m, 2) + 1)
+    // var deRise = deRun === 0 ? deLen : deRun * this.mid.m
+
+    const d = {
+      x: b.x - (deVector.x / 2),
+      y: b.y - (deVector.y / 2)
+    }
+
+    const e = {
+      x: b.x + (deVector.x / 2),
+      y: b.y + (deVector.y / 2)
+    }
+
+    markPoint(d, 'blue', 8)
+    markPoint(e, 'green', 8)
+    // console.log('-------')
+    // console.log(deLen)
+    // console.log(Math.sqrt(Math.pow(e.x - d.x, 2) + Math.pow(e.y - b.y, 2)))
+
+    const daLen = { x: a.x - d.x, y: a.y - d.y }
+    const eaLen = { x: a.x - e.x, y: a.y - e.y }
+
+    // prog pt P0 - P1
+    const h = {
+      x: d.x - (daLen.x / (1 - t)) * t,
+      y: d.y - (daLen.y / (1 - t)) * t,
+    }
+
+    // prog pt P3 - P2
+    const k = {
+      x: e.x - (eaLen.x / t) * (1 - t),
+      y: e.y - (eaLen.y / t) * (1 - t),
+    }
+
+    const p1 = {
+      x: h.x + ((h.x - start.x) / (1 - t)) * t,
+      y: h.y + ((h.y - start.y) / (1 - t)) * t,
+    }
+
+    const p2 = {
+      x: k.x + ((k.x - end.x) / t) * (1 - t),
+      y: k.y + ((k.y - end.y) / t) * (1 - t),
+    }
+
+
+    const points = [
       {
         x: start.x,
         y: start.y,
       },
-      {
-        x: start.x + (start.vx * start.dt),
-        y: start.y + (start.vy * start.dt),
-      },
-      {
-        x: end.x - (end.vx * end.dt),
-        y: end.y - (end.vy * end.dt),
-      },
+      p1,
+      p2,
       {
         x: end.x,
         y: end.y
       }
     ]
+
+    return points
   }
 
   _bezier(t, p0, p1, p2, p3) {
@@ -235,19 +290,22 @@ export default class MouseRecorder {
     const event = new MouseMoveEvent(browserEvent, this._lastEvent)
     markPoint(event, 'rgba(100,100,100,0.25)', 5)
 
-    // if (this._lastEvent &&
-    //     this.events.length == 0 &&
-    //     event.dt < this._defaultTimeout) {
+    if (this._lastEvent &&
+        this.events.length == 0 &&
+        event.dt < this._defaultTimeout) {
 
-    //   const firstEvent = new MouseMoveEvent(this._lastEvent.browserEvent, null)
-    // firstEvent.first = true
-    //   firstEvent.t = event.t
+      const firstEvent = new MouseMoveEvent(this._lastEvent.browserEvent, null)
+    firstEvent.first = true
 
-    //   firstEvent.next = event
-    //   event.prev = firstEvent
+    if (event.t - firstEvent.t > this._defaultTimeout) {
+      firstEvent.t = event.t
+      }
 
-    //   this.events.push(firstEvent)
-    // }
+      firstEvent.next = event
+      event.prev = firstEvent
+
+      this.events.push(firstEvent)
+    }
 
     this.events.push(event)
     this._lastEvent = event
